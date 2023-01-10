@@ -156,3 +156,6 @@ void showSaves(SDL sdl, Game* game, Colors color);
 
 // Load game state chosen by player
 void loadGame(Game* game, char* filename);
+
+// Check game status
+void checkGameStatus(SDL* sdl, Game* game, Colors color);
