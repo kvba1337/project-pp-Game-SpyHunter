@@ -48,7 +48,7 @@ extern "C" {
 #define BOX_POS_X				SCREEN_WIDTH - 70
 #define BOX_POS_Y				SCREEN_HEIGHT - 70
 
-typedef struct SDL {
+struct SDL {
 	SDL_Event event;
 	SDL_Surface* screen, * charset, * carSurface, * tree, * line;
 	SDL_Texture* scrtex;
@@ -56,7 +56,7 @@ typedef struct SDL {
 	SDL_Renderer* renderer;
 };
 
-typedef struct Game {
+struct Game {
 	struct {
 		int tick1;
 		int tick2;
@@ -88,7 +88,7 @@ typedef struct Game {
 	} car;
 };
 
-typedef struct Colors {
+struct Colors {
 	char text[128];
 	int czarny;
 	int bialy;

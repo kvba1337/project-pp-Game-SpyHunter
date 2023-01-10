@@ -118,7 +118,7 @@ void calculateData(Game* game) {
 		game->info.distance += game->car.speed * game->time.deltaTime;
 
 	// Calculate score (add every 50 points)
-	int tempScore = game->info.distance * SCORE_RATIO;
+	int tempScore = (int)game->info.distance * SCORE_RATIO;
 	if(tempScore%50==0) game->info.score = tempScore;
 }
 
@@ -331,22 +331,22 @@ void saveGame(SDL sdl, Game game, Colors color) {
 
 bool findFiles(char files[][25], int* fileNumber) {
 	int counter = 0;
-	HANDLE hFind;
+	HANDLE findFile;
 	WIN32_FIND_DATAA findData;
+	findFile = FindFirstFileA("./saves/*.txt", &findData);
 
-	hFind = FindFirstFileA("./saves/*.txt", &findData);
-	if (hFind == INVALID_HANDLE_VALUE) {
+	if (findFile == INVALID_HANDLE_VALUE) {
 		printf("Brak plikow do wczytania\n");
 		return false;
 	}
 
 	do {
-		strcpy(files[counter], findData.cFileName);
-		counter++;
-	} while (FindNextFileA(hFind, &findData));
+		strcpy(files[counter++], findData.cFileName);
+	} while (FindNextFileA(findFile, &findData));
 
 	*fileNumber = counter;
-	FindClose(hFind);
+	FindClose(findFile);
+	return true;
 }
 
 void showSaves(SDL sdl, Game* game, Colors color) {
@@ -360,6 +360,9 @@ void showSaves(SDL sdl, Game* game, Colors color) {
 	}
 	SDL_FillRect(sdl.screen, NULL, color.czarny);
 
+	sprintf(color.text, "ZEBY WYBRAC STAN GRY WCISNIJ ODPOWIEDNI NUMER NA KLAWIATURZE ||| ESC - ANULUJ");
+	drawString(sdl.screen, CENTER_TEXT, SAVES_INFO_POS_Y-40, color.text, sdl.charset);
+
 	sprintf(color.text, "ZAPISY STANOW GRY:");
 	drawString(sdl.screen, CENTER_TEXT, SAVES_INFO_POS_Y, color.text, sdl.charset);
 
@@ -367,9 +370,6 @@ void showSaves(SDL sdl, Game* game, Colors color) {
 		sprintf(color.text, "%i: %s", i, files[i]);
 		drawString(sdl.screen, CENTER_TEXT, ((SAVES_INFO_POS_Y+50) + (i * 50)), color.text, sdl.charset);
 	}
-
-	sprintf(color.text, "WYBIERZ PLIK KTORY CHCESZ ZALADOWAC");
-	drawString(sdl.screen, CENTER_TEXT, ((SAVES_INFO_POS_Y+100) + (fileNumber * 50)), color.text, sdl.charset);
 
 	displaySurface(&sdl);
 
@@ -395,6 +395,15 @@ void showSaves(SDL sdl, Game* game, Colors color) {
 						break;
 					case SDLK_5:
 						fileNumber = 5;
+						break;
+					case SDLK_6:
+						fileNumber = 6;
+						break;
+					case SDLK_7:
+						fileNumber = 7;
+						break;
+					case SDLK_ESCAPE:
+						game->status.load = false;
 						break;
 				}
 		}
@@ -422,7 +431,7 @@ void loadGame(Game* game, char* filename) {
 	double distance;
 	double worldTime;
 	int life;
-	fscanf(file, "%i %lf %lf %i", &score, &distance, &worldTime, &life);
+	fscanf_s(file, "%i %lf %lf %i", &score, &distance, &worldTime, &life);
 
 	game->time.tick1 = SDL_GetTicks();
 	game->info.score = score;
