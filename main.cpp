@@ -14,16 +14,21 @@ int main(int argc, char **argv) {
 	newGame(&sdl, &game);
 
 	while (!game.status.quit) {
-
 		checkGameStatus(&sdl, &game, color);
 
-		setCarInfo(&game);
+		updateCarInfo(&game);
+
+		initEnemies(&game);
+
+		updateEnemyCarsInfo(&game);
 
 		calculateData(&game);
 
 		SDL_FillRect(sdl.screen, NULL, color.zielony);
 
-		drawRoadAndCar(&sdl, &game, &color);
+		drawRoadAndCars(&sdl, &game, &color);
+
+		checkPlayerCarCollision(&game);
 
 		drawInterface(sdl, game, color);
 

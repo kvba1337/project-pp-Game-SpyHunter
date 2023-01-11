@@ -1,10 +1,13 @@
 #pragma once
+#include<iostream>
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
 #include<windows.h>
 #include<conio.h>
 #include<time.h>
+
+using namespace std;
 
 extern "C" {
 #include"./SDL2-2.0.10/include/SDL.h"
@@ -19,11 +22,11 @@ extern "C" {
 #define ROAD_POS_Y				0
 #define ROADSIDE				50
 #define BOTTOM_BORDER			30
-#define TREES_MOVING_RATIO		100
+#define TREES_MOVING_RATIO		300
 #define DISTANCE_BETWEEN_TREES	450
 #define TREE_DISSAPEAR_DISTANCE 120
 #define DEFAULT_POS_CAR_X		SCREEN_WIDTH / 2
-#define DEFAULT_POS_CAR_Y		SCREEN_HEIGHT - 50
+#define DEFAULT_POS_CAR_Y		SCREEN_HEIGHT - 150
 #define INFINITY_LIFE			100
 #define INFINITY_LIFE_TIME		10
 #define PTS_TO_GET_EXTRA_LIFES	700
@@ -39,7 +42,6 @@ extern "C" {
 #define FINISH_INFO_POS_Y		100
 #define SAVES_INFO_POS_Y		50
 #define SCORE_RATIO				50
-#define INTERFACE_TOP_BORDER	80
 #define INTERFACE_HEIGHT		36
 #define INTERFACE_WIDTH			SCREEN_WIDTH - 8
 #define INTERFACE_POS			4
@@ -47,10 +49,13 @@ extern "C" {
 #define BOX_SIZE				70
 #define BOX_POS_X				SCREEN_WIDTH - 70
 #define BOX_POS_Y				SCREEN_HEIGHT - 70
+#define MAX_ENEMIES				3
+#define CAR_WIDTH				40
+#define CAR_HEIGHT				90
 
 struct SDL {
 	SDL_Event event;
-	SDL_Surface* screen, * charset, * carSurface, * tree, * line;
+	SDL_Surface* screen, * charset, * carSurface, * enemyCarSurface, * tree, * line;
 	SDL_Texture* scrtex;
 	SDL_Window* window;
 	SDL_Renderer* renderer;
@@ -68,12 +73,12 @@ struct Game {
 		bool pause;
 		bool finish;
 		bool load;
-		bool save;
-		bool loadError;
 	} status;
 	struct {
 		double distance;
 		int score;
+		int t1;
+		int t2;
 	} info;
 	struct {
 		double posX;
@@ -86,6 +91,10 @@ struct Game {
 		double speed;
 		int life;
 	} car;
+	struct {
+		double posX;
+		double posY;
+	} enemyCar[5];
 };
 
 struct Colors {
@@ -134,13 +143,13 @@ void processEvents(SDL* sdl, Game* game, Colors color);
 void cleanupAndQuit(SDL* sdl);
 
 // Draw the road and a car
-void drawRoadAndCar(SDL* sdl, Game* game, Colors* color);
+void drawRoadAndCars(SDL* sdl, Game* game, Colors* color);
 
 // Start a new game
 void newGame(SDL* sdl, Game* game);
 
 // Set life and current position of the car
-void setCarInfo(Game* game);
+void updateCarInfo(Game* game);
 
 // Finish game
 void finishGame(SDL sdl, Game game, Colors color);
@@ -148,14 +157,14 @@ void finishGame(SDL sdl, Game game, Colors color);
 // Save the current game state
 void saveGame(SDL sdl, Game game, Colors color);
 
-// Find saved game states in /saves directory
-bool findFiles(char files[][25], int* fileNumber);
-
-// Display saved game states on the screen
-void showSaves(SDL sdl, Game* game, Colors color);
-
 // Load game state chosen by player
-void loadGame(Game* game, char* filename);
+void loadGame(SDL* sdl, Game* game, Colors color);
 
 // Check game status
 void checkGameStatus(SDL* sdl, Game* game, Colors color);
+
+void initEnemies(Game* game);
+
+void updateEnemyCarsInfo(Game* game);
+
+void checkPlayerCarCollision(Game* game);

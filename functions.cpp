@@ -80,6 +80,7 @@ int initialConfiguration(SDL* sdl, Colors* color) {
 	sdl->carSurface = loadBitmap("assets/car.bmp", false, 0x00000000);
 	sdl->tree = loadBitmap("assets/tree.bmp", false, 0x00000000);
 	sdl->line = loadBitmap("assets/line.bmp", false, 0x00000000);
+	sdl->enemyCarSurface = loadBitmap("assets/enemyCar.bmp", false, 0x00000000);
 
 	// Set color keys
 	color->czarny = SDL_MapRGB(sdl->screen->format, 0x00, 0x00, 0x00);
@@ -90,6 +91,7 @@ int initialConfiguration(SDL* sdl, Colors* color) {
 
 	// Initialitize the pseudo-random number generator
 	srand(time(NULL));
+
 	return 0;
 }
 
@@ -170,22 +172,23 @@ void processEvents(SDL* sdl, Game* game, Colors color) {
 						game->car.turn = CAR_TURN_RATIO;
 						break;
 					case SDLK_n:
-						newGame(sdl, game);
+							newGame(sdl, game);
 						break;
 					case SDLK_p:
 						game->status.pause = !(game->status.pause);
-						game->status.loadError = false;
 						break;
 					case SDLK_f:
 						game->status.finish = true;
 						break;
 					case SDLK_s:
-						saveGame(*sdl, *game, color);
-						game->status.pause = true;
-						game->status.save = true;
+						if (game->status.finish == false) {
+							saveGame(*sdl, *game, color);
+							game->status.pause = true;
+						}
 						break;
 					case SDLK_l:
-						game->status.load = true;
+						loadGame(sdl, game, color);
+						game->status.pause = true;
 						break;
 					}
 					break;
@@ -222,7 +225,7 @@ void cleanupAndQuit(SDL* sdl) {
 	SDL_Quit();
 }
 
-void drawRoadAndCar(SDL* sdl, Game* game, Colors* color) {
+void drawRoadAndCars(SDL* sdl, Game* game, Colors* color) {
 	// Draw road
 	drawRectangle(sdl->screen, ROAD_POS_X, ROAD_POS_Y, ROAD_WIDTH, ROAD_HEIGHT, color->czarny, color->czarny);
 
@@ -241,6 +244,11 @@ void drawRoadAndCar(SDL* sdl, Game* game, Colors* color) {
 
 	// Draw a car
 	drawSurface(sdl->screen, sdl->carSurface, game->car.posX, game->car.posY);
+
+	// Draw enemy cars
+	for (int i = 0; i < 5; ++i) {
+		drawSurface(sdl->screen, sdl->enemyCarSurface, game->enemyCar[i].posX, game->enemyCar[i].posY);
+	}
 }
 
 void newGame(SDL* sdl, Game* game) {
@@ -255,9 +263,14 @@ void newGame(SDL* sdl, Game* game) {
 	game->car.life = INFINITY_LIFE;
 	game->tree.posX = rand() % 100 + 20;
 	game->tree.posY = 0;
+	game->enemyCar[0].posY = 700;
+	game->enemyCar[1].posY = 1000;
+	game->enemyCar[2].posY = 1500;
+	game->enemyCar[3].posY = -1000;
+	game->enemyCar[4].posY = -1000;
 }
 
-void setCarInfo(Game* game) {
+void updateCarInfo(Game* game) {
 	game->time.tick2 = SDL_GetTicks();
 
 	// Additional lifes 
@@ -272,9 +285,6 @@ void setCarInfo(Game* game) {
 	// Setting posision X of the car
 	game->car.posX += game->car.turn;
 
-	// Setting position Y of the car
-	if (game->car.speed > CAR_DEFAULT_SPEED) game->car.posY -= game->car.speed * CAR_SLOWDOWN_RATIO; 
-	if (game->car.speed < CAR_DEFAULT_SPEED) game->car.posY += game->car.speed * CAR_ACCELERATION_RATIO;
 
 	// Blocking off-road driving
 	if ((game->car.posX < (ROAD_WIDTH - ROADSIDE)) || (game->car.posX > (2 * ROAD_WIDTH) + ROADSIDE)) {
@@ -283,8 +293,7 @@ void setCarInfo(Game* game) {
 		game->car.posY = DEFAULT_POS_CAR_Y;
 	}
 
-	if (game->car.posY < INTERFACE_TOP_BORDER) game->car.posY = INTERFACE_TOP_BORDER;
-	if (game->car.posY > SCREEN_HEIGHT - BOTTOM_BORDER) game->car.posY = SCREEN_HEIGHT - BOTTOM_BORDER;
+	
 	if (game->car.life == 0) game->status.finish = true;
 }
 
@@ -311,16 +320,19 @@ void saveGame(SDL sdl, Game game, Colors color) {
 
 	strftime(buffer, 32, "%d.%m.%Y_%H.%M.%S", timeInfo);
 
-	sprintf(filename, "saves/%s.txt", buffer);
+	if (game.status.load == false) {
+		sprintf(filename, "saves/%s.txt", buffer);
+	}
+	else sprintf(filename, "%s.txt", buffer);
 
 	FILE* file = fopen(filename, "w");
 
 	if (file == NULL) {
-		printf("Nie mozna otworzyc pliku");
+		printf("Nie mozna otworzyc pliku\n");
 		return;
 	}
 
-	fprintf_s(file, "%i %lf %lf %i", game.info.score, game.info.distance, game.time.worldTime, game.car.life);
+	fprintf_s(file, "%i %lf %lf %i %lf %lf", game.info.score, game.info.distance, game.time.worldTime, game.car.life, game.car.posX, game.car.posY);
 
 	fclose(file);
 
@@ -329,119 +341,44 @@ void saveGame(SDL sdl, Game game, Colors color) {
 	displaySurface(&sdl);
 }
 
-bool findFiles(char files[][25], int* fileNumber) {
-	int counter = 0;
-	HANDLE findFile;
-	WIN32_FIND_DATAA findData;
-	findFile = FindFirstFileA("./saves/*.txt", &findData);
+void loadGame(SDL* sdl, Game* game, Colors color) {
+	OPENFILENAMEA openedFile;
+	char fileName[MAX_PATH] = "";
+	ZeroMemory(&openedFile, sizeof(openedFile));
+	openedFile.lStructSize = sizeof(openedFile);
+	openedFile.lpstrFile = fileName;
+	openedFile.nMaxFile = MAX_PATH;
+	openedFile.lpstrFilter = "Pliki tekstowe (*.txt)\0*.txt\0 Wszystkie pliki (*.*)\0*.*\0";
 
-	if (findFile == INVALID_HANDLE_VALUE) {
-		printf("Brak plikow do wczytania\n");
-		return false;
-	}
+	if (GetOpenFileNameA(&openedFile) == TRUE) {
+		FILE* file = fopen(fileName, "r");
 
-	do {
-		strcpy(files[counter++], findData.cFileName);
-	} while (FindNextFileA(findFile, &findData));
-
-	*fileNumber = counter;
-	FindClose(findFile);
-	return true;
-}
-
-void showSaves(SDL sdl, Game* game, Colors color) {
-	char files[25][25];
-	int fileNumber = 0;
-	if(findFiles(files, &fileNumber) == false) {
-		game->status.loadError = true;
-		game->status.pause = true;
-		game->status.load = false;
-		return;
-	}
-	SDL_FillRect(sdl.screen, NULL, color.czarny);
-
-	sprintf(color.text, "ZEBY WYBRAC STAN GRY WCISNIJ ODPOWIEDNI NUMER NA KLAWIATURZE ||| ESC - ANULUJ");
-	drawString(sdl.screen, CENTER_TEXT, SAVES_INFO_POS_Y-40, color.text, sdl.charset);
-
-	sprintf(color.text, "ZAPISY STANOW GRY:");
-	drawString(sdl.screen, CENTER_TEXT, SAVES_INFO_POS_Y, color.text, sdl.charset);
-
-	for (int i = 0; i < fileNumber; i++) {
-		sprintf(color.text, "%i: %s", i, files[i]);
-		drawString(sdl.screen, CENTER_TEXT, ((SAVES_INFO_POS_Y+50) + (i * 50)), color.text, sdl.charset);
-	}
-
-	displaySurface(&sdl);
-
-	fileNumber = -1;
-	while (SDL_PollEvent(&sdl.event)) {
-		switch (sdl.event.type) {
-			case SDL_KEYDOWN:
-				switch (sdl.event.key.keysym.sym) {
-					case SDLK_0:
-						fileNumber = 0;
-						break;
-					case SDLK_1:
-						fileNumber = 1;
-						break;
-					case SDLK_2:
-						fileNumber = 2;
-						break;
-					case SDLK_3:
-						fileNumber = 3;
-						break;
-					case SDLK_4:
-						fileNumber = 4;
-						break;
-					case SDLK_5:
-						fileNumber = 5;
-						break;
-					case SDLK_6:
-						fileNumber = 6;
-						break;
-					case SDLK_7:
-						fileNumber = 7;
-						break;
-					case SDLK_ESCAPE:
-						game->status.load = false;
-						break;
-				}
+		if (file == NULL) {
+			printf("Nie mo¿na otworzyæ pliku");
+			return;
 		}
+
+		int score;
+		double distance;
+		double worldTime;
+		int life;
+		double carPosX;
+		double carPosY;
+
+		fscanf_s(file, "%i %lf %lf %i %lf %lf", &score, &distance, &worldTime, &life, &carPosX, &carPosY);
+		
+		game->time.tick1 = SDL_GetTicks();
+		game->info.score = score;
+		game->info.distance = distance;
+		game->time.worldTime = worldTime;
+		game->car.life = life;
+		game->car.posX = carPosX;
+		game->car.posY = carPosY;
+
+		fclose(file);
+		game->status.finish = false;
+		game->status.load = true;
 	}
-
-	if (fileNumber != -1) {
-		loadGame(game, files[fileNumber]);
-		game->status.load = false;
-		game->status.loadError = false;
-	}
-}
-
-void loadGame(Game* game, char* filename) {
-	char buffer[32];
-	sprintf(buffer, "saves/%s", filename);
-
-	FILE* file = fopen(buffer, "r");
-
-	if (file == NULL) {
-		printf("Nie mozna otworzyc pliku");
-		return;
-	}
-
-	int score;
-	double distance;
-	double worldTime;
-	int life;
-	fscanf_s(file, "%i %lf %lf %i", &score, &distance, &worldTime, &life);
-
-	game->time.tick1 = SDL_GetTicks();
-	game->info.score = score;
-	game->info.distance = distance;
-	game->time.worldTime = worldTime;
-	game->car.life = life;
-	game->car.posX = DEFAULT_POS_CAR_X;
-	game->car.posY = DEFAULT_POS_CAR_Y;
-
-	fclose(file);
 }
 
 void checkGameStatus(SDL* sdl, Game* game, Colors color) {
@@ -452,10 +389,6 @@ void checkGameStatus(SDL* sdl, Game* game, Colors color) {
 			game->time.tick1 = SDL_GetTicks();
 			sprintf(color.text, "PAUZA");
 			drawString(sdl->screen, PAUSE_POS_X, PAUSE_POS_Y, color.text, sdl->charset);
-			if (game->status.loadError) {
-				sprintf(color.text, "BRAK PLIKOW DO WCZYTANIA");
-				drawString(sdl->screen, PAUSE_POS_X, PAUSE_POS_Y - 10, color.text, sdl->charset);
-			}
 			displaySurface(sdl);
 			continue;
 		}
@@ -464,14 +397,70 @@ void checkGameStatus(SDL* sdl, Game* game, Colors color) {
 			finishGame(*sdl, *game, color);
 			continue;
 		}
+		break;
+	}
+}
 
-		if (game->status.load) {
-			showSaves(*sdl, game, color);
-			continue;
+void initEnemies(Game* game) {
+	// Cars from front
+	int posFrontCarDissapear = rand() % 221 + 480;
+	for (int i = 0; i < MAX_ENEMIES; ++i) {
+		if (game->enemyCar[i].posY > posFrontCarDissapear) {
+			game->enemyCar[i].posX = rand() % 213 + 214;
+			game->enemyCar[i].posY = rand() % 1000 - 1500;
+			srand(rand());
 		}
-		else {
-			game->status.load = false;
+	}
+
+	// Cars from back
+	int posBackCarDissapear = rand() % 500 - 1000;
+	for (int i = 3; i < 5; ++i) {
+		if (game->enemyCar[i].posY < posBackCarDissapear) {
+			game->enemyCar[i].posX = rand() % 213 + 214;
+			game->enemyCar[i].posY = rand() % 1000 + 500;
+			srand(rand());
 		}
-	break;
+	}
+}
+
+void updateEnemyCarsInfo(Game* game) {
+	for (int i = 0; i < MAX_ENEMIES; ++i) {
+		game->enemyCar[i].posY += game->car.speed * game->time.deltaTime * 200;
+	}
+	for (int i = 3; i < 5; ++i) {
+		int tempSpeed=1;
+		if (game->car.speed > 1) tempSpeed = -1.5;
+		else if (game->car.speed < 1) tempSpeed = 2.0;
+		else tempSpeed = 1;
+
+		game->enemyCar[i].posY -= tempSpeed * game->time.deltaTime * 100;
+	}
+}
+
+void checkPlayerCarCollision(Game* game) {
+	for (int i = 0; i < 5; ++i) {
+		double playerPosX = game->car.posX;
+		double playerPosY = game->car.posY;
+		double enemyPosX = game->enemyCar[i].posX;
+		double enemyPosY = game->enemyCar[i].posY;
+		game->info.t2 = SDL_GetTicks();
+		static int t1;
+		int t2 = game->time.worldTime;
+		if (t2 - t1 < 3) printf("e\n");
+
+		if (abs(playerPosX - enemyPosX) < CAR_WIDTH
+			&& abs(playerPosY - enemyPosY) < CAR_HEIGHT) {
+			if (playerPosX > enemyPosX || playerPosX < enemyPosX) {
+				game->car.posX = DEFAULT_POS_CAR_X;
+				game->car.life--;
+				game->enemyCar[0].posY = 700;
+				game->enemyCar[1].posY = 1000;
+				game->enemyCar[2].posY = 1500;
+				game->enemyCar[3].posY = 2000;
+				game->enemyCar[4].posY = 4000;
+				t1 = game->time.worldTime;
+				printf("%i", t1);
+			}
+		}
 	}
 }
