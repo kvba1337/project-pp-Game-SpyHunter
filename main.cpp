@@ -18,9 +18,9 @@ int main(int argc, char **argv) {
 
 		updateCarInfo(&game);
 
-		initEnemies(&game);
+		initBotsCars(&game);
 
-		updateEnemyCarsInfo(&game);
+		updateBotsCarsInfo(&game);
 
 		calculateData(&game);
 
@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
 
 		drawRoadAndCars(&sdl, &game, &color);
 
-		checkPlayerCarCollision(&game);
+		checkCarCollisionStatus(&game);
 
 		drawInterface(sdl, game, color);
 

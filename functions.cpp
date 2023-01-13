@@ -81,6 +81,7 @@ int initialConfiguration(SDL* sdl, Colors* color) {
 	sdl->tree = loadBitmap("assets/tree.bmp", false, 0x00000000);
 	sdl->line = loadBitmap("assets/line.bmp", false, 0x00000000);
 	sdl->enemyCarSurface = loadBitmap("assets/enemyCar.bmp", false, 0x00000000);
+	sdl->friendlyCarSurface = loadBitmap("assets/friendlyCar.bmp", false, 0x00000000);
 
 	// Set color keys
 	color->czarny = SDL_MapRGB(sdl->screen->format, 0x00, 0x00, 0x00);
@@ -102,9 +103,7 @@ SDL_Surface* loadBitmap(const char* filename, bool colorKey, Uint32 colorKeyValu
 		return NULL;
 	}
 
-	if (colorKey) {
-		SDL_SetColorKey(bitmap, true, colorKeyValue);
-	}
+	if (colorKey) SDL_SetColorKey(bitmap, true, colorKeyValue);
 
 	return bitmap;
 }
@@ -116,7 +115,7 @@ void calculateData(Game* game) {
 	game->time.worldTime += game->time.deltaTime;
 
 	// If car is on the road increase total distance
-	if ((game->car.posX > ROAD_WIDTH) && (game->car.posX < (2 * ROAD_WIDTH))) 
+	if ((game->car.posX > ROAD_WIDTH) && (game->car.posX < (2 * ROAD_WIDTH)) && game->status.destroyFriend==false) 
 		game->info.distance += game->car.speed * game->time.deltaTime;
 
 	// Calculate score (add every 50 points)
@@ -138,10 +137,10 @@ void drawInterface(SDL sdl, Game game, Colors color) {
 	sprintf(color.text, "a, b, c,");
 	drawString(sdl.screen, BOX_POS_X + 5, BOX_POS_Y + 10, color.text, sdl.charset);
 	sprintf(color.text, "d, e, f,");
-	drawString(sdl.screen, BOX_POS_X + 5, BOX_POS_Y + 25, color.text, sdl.charset);sprintf(color.text, "d, e, f");
-	sprintf(color.text, "g, i, m,");
+	drawString(sdl.screen, BOX_POS_X + 5, BOX_POS_Y + 25, color.text, sdl.charset);
+	sprintf(color.text, "g, i, j,");
 	drawString(sdl.screen, BOX_POS_X + 5, BOX_POS_Y + 40, color.text, sdl.charset);
-	sprintf(color.text, "x, x, x");
+	sprintf(color.text, "m");
 	drawString(sdl.screen, BOX_POS_X + 5, BOX_POS_Y + 55, color.text, sdl.charset);
 }
 
@@ -220,6 +219,8 @@ void cleanupAndQuit(SDL* sdl) {
 	SDL_FreeSurface(sdl->screen);
 	SDL_FreeSurface(sdl->charset);
 	SDL_FreeSurface(sdl->carSurface);
+	SDL_FreeSurface(sdl->enemyCarSurface);
+	SDL_FreeSurface(sdl->friendlyCarSurface);
 	SDL_FreeSurface(sdl->tree);
 	SDL_FreeSurface(sdl->line);
 	SDL_Quit();
@@ -227,12 +228,12 @@ void cleanupAndQuit(SDL* sdl) {
 
 void drawRoadAndCars(SDL* sdl, Game* game, Colors* color) {
 	// Draw road
-	drawRectangle(sdl->screen, ROAD_POS_X, ROAD_POS_Y, ROAD_WIDTH, ROAD_HEIGHT, color->czarny, color->czarny);
+	drawRectangle(sdl->screen, ROAD_START_POS_X, ROAD_START_POS_Y, ROAD_WIDTH, ROAD_HEIGHT, color->czarny, color->czarny);
 
 	// Set position of trees
 	game->tree.posY += game->car.speed * game->time.deltaTime * TREES_MOVING_RATIO;
 	if (game->tree.posY > SCREEN_HEIGHT+TREE_DISSAPEAR_DISTANCE) {
-		game->tree.posY = ROAD_POS_Y;
+		game->tree.posY = ROAD_START_POS_Y;
 		game->tree.posX = rand() % 161 + 20; // Random X coordinate of new tree
 	}
 
@@ -242,59 +243,59 @@ void drawRoadAndCars(SDL* sdl, Game* game, Colors* color) {
 	for (int i = -600; i <= 600; i += 100)
 		drawSurface(sdl->screen, sdl->line, SCREEN_WIDTH / 2, game->tree.posY+i);
 
-	// Draw a car
+	// Draw a player car
 	drawSurface(sdl->screen, sdl->carSurface, game->car.posX, game->car.posY);
 
 	// Draw enemy cars
-	for (int i = 0; i < 5; ++i) {
+	for (int i = 0; i <= MAX_ENEMY_CARS_INDEX; ++i)
 		drawSurface(sdl->screen, sdl->enemyCarSurface, game->enemyCar[i].posX, game->enemyCar[i].posY);
-	}
+
+	// Draw friendly cars
+	for (int i = 0; i <= MAX_FRIENDLY_CARS_INDEX; ++i)
+		drawSurface(sdl->screen, sdl->friendlyCarSurface, game->friendlyCar[i].posX, game->friendlyCar[i].posY);
 }
 
 void newGame(SDL* sdl, Game* game) {
-	game->status.finish = false;
+	game->time.destroyTime = 0;
 	game->time.worldTime = 0;
 	game->time.tick1 = SDL_GetTicks();
+	game->status.finish = false;
+	game->status.destroyFriend = false;
 	game->info.score = 0;
 	game->info.distance = 0;
+	game->tree.posX = rand() % 100 + 20;
+	game->tree.posY = 0;
 	game->car.speed = CAR_DEFAULT_SPEED;
 	game->car.posX = DEFAULT_POS_CAR_X;
 	game->car.posY = DEFAULT_POS_CAR_Y;
 	game->car.life = INFINITY_LIFE;
-	game->tree.posX = rand() % 100 + 20;
-	game->tree.posY = 0;
-	game->enemyCar[0].posY = 700;
-	game->enemyCar[1].posY = 1000;
-	game->enemyCar[2].posY = 1500;
-	game->enemyCar[3].posY = -1000;
-	game->enemyCar[4].posY = -1000;
+	randomizeCarsPositions(game);
 }
 
 void updateCarInfo(Game* game) {
 	game->time.tick2 = SDL_GetTicks();
 
 	// Additional lifes 
-	if ((game->time.worldTime > INFINITY_LIFE_TIME) && (game->time.worldTime < (INFINITY_LIFE_TIME + 1))) {
+	if ((game->time.worldTime > GOD_MODE_TIME) && (game->time.worldTime < (GOD_MODE_TIME + 1))) {
 		if (game->info.score > PTS_TO_GET_EXTRA_LIFES) {
-			game->car.life = 3;
+			game->car.life = ADDITIONAL_LIFES;
 		}
 		else
-			game->car.life = 1;
+			game->car.life = DEFAULT_LIFES;
 	}
 
 	// Setting posision X of the car
 	game->car.posX += game->car.turn;
 
 
-	// Blocking off-road driving
+	// Losing health for off-road driving 
 	if ((game->car.posX < (ROAD_WIDTH - ROADSIDE)) || (game->car.posX > (2 * ROAD_WIDTH) + ROADSIDE)) {
 		game->car.life--;
 		game->car.posX = DEFAULT_POS_CAR_X;
 		game->car.posY = DEFAULT_POS_CAR_Y;
 	}
 
-	
-	if (game->car.life == 0) game->status.finish = true;
+	if (game->car.life <= 0) game->status.finish = true;
 }
 
 void finishGame(SDL sdl, Game game, Colors color) {
@@ -384,7 +385,6 @@ void loadGame(SDL* sdl, Game* game, Colors color) {
 void checkGameStatus(SDL* sdl, Game* game, Colors color) {
 	while (1) {
 		processEvents(sdl, game, color);
-
 		if (game->status.pause) {
 			game->time.tick1 = SDL_GetTicks();
 			sprintf(color.text, "PAUZA");
@@ -392,7 +392,6 @@ void checkGameStatus(SDL* sdl, Game* game, Colors color) {
 			displaySurface(sdl);
 			continue;
 		}
-
 		if (game->status.finish) {
 			finishGame(*sdl, *game, color);
 			continue;
@@ -401,66 +400,131 @@ void checkGameStatus(SDL* sdl, Game* game, Colors color) {
 	}
 }
 
-void initEnemies(Game* game) {
+void initBotsCars(Game* game) {
 	// Cars from front
-	int posFrontCarDissapear = rand() % 221 + 480;
-	for (int i = 0; i < MAX_ENEMIES; ++i) {
-		if (game->enemyCar[i].posY > posFrontCarDissapear) {
-			game->enemyCar[i].posX = rand() % 213 + 214;
-			game->enemyCar[i].posY = rand() % 1000 - 1500;
-			srand(rand());
-		}
+	for (int CAR_INDEX = 0; CAR_INDEX <= MAX_FRONT_CARS_INDEX; ++CAR_INDEX) {
+		double frontCarDissapearPos = rand() % 100 + SCREEN_HEIGHT;
+
+		// Initialitize enemy cars
+		initFrontCars(game, &game->enemyCar[CAR_INDEX].posX, &game->enemyCar[CAR_INDEX].posY, &frontCarDissapearPos);
+
+		// Initialitize friendly cars
+		initFrontCars(game, &game->friendlyCar[CAR_INDEX].posX, &game->friendlyCar[CAR_INDEX].posY, &frontCarDissapearPos);
 	}
 
 	// Cars from back
-	int posBackCarDissapear = rand() % 500 - 1000;
-	for (int i = 3; i < 5; ++i) {
-		if (game->enemyCar[i].posY < posBackCarDissapear) {
-			game->enemyCar[i].posX = rand() % 213 + 214;
-			game->enemyCar[i].posY = rand() % 1000 + 500;
-			srand(rand());
+	for (int i = MAX_FRONT_CARS_INDEX+1; i <= MAX_BACK_CARS_INDEX; ++i) {
+		int backCarDissapearPos = rand() % 100 - 100;
+		if (game->enemyCar[i].posY < backCarDissapearPos) {
+			game->enemyCar[i].posX = rand() % ROAD_WIDTH + ROAD_WIDTH;
+			game->enemyCar[i].posY = rand() % (3 * SCREEN_HEIGHT) + SCREEN_HEIGHT;
 		}
 	}
 }
 
-void updateEnemyCarsInfo(Game* game) {
-	for (int i = 0; i < MAX_ENEMIES; ++i) {
-		game->enemyCar[i].posY += game->car.speed * game->time.deltaTime * 200;
-	}
-	for (int i = 3; i < 5; ++i) {
-		int tempSpeed=1;
-		if (game->car.speed > 1) tempSpeed = -1.5;
-		else if (game->car.speed < 1) tempSpeed = 2.0;
-		else tempSpeed = 1;
-
-		game->enemyCar[i].posY -= tempSpeed * game->time.deltaTime * 100;
+void initFrontCars(Game* game, double* botPosX, double* botPosY, double* frontCarDissapearPos) {
+	if (*botPosY > *frontCarDissapearPos) {
+		double newPosX = rand() % ROAD_WIDTH + ROAD_WIDTH;
+		double newPosY = rand() % (3 * SCREEN_HEIGHT) - 1500;
+		while (checkDoublingPosition(game, newPosX, newPosY)) {
+			newPosX = rand() % ROAD_WIDTH + ROAD_WIDTH;
+			newPosY = rand() % (3 * SCREEN_HEIGHT) - 1500;
+		}
+		*botPosX = newPosX;
+		*botPosY = newPosY;
 	}
 }
 
-void checkPlayerCarCollision(Game* game) {
-	for (int i = 0; i < 5; ++i) {
-		double playerPosX = game->car.posX;
-		double playerPosY = game->car.posY;
-		double enemyPosX = game->enemyCar[i].posX;
-		double enemyPosY = game->enemyCar[i].posY;
-		game->info.t2 = SDL_GetTicks();
-		static int t1;
-		int t2 = game->time.worldTime;
-		if (t2 - t1 < 3) printf("e\n");
+void updateBotsCarsInfo(Game* game) {
+	// Front cars
+	for (int i = 0; i <= MAX_FRONT_CARS_INDEX; ++i) {
+		game->enemyCar[i].posY += game->car.speed * game->time.deltaTime * CARS_MOVING_RATIO;
+		game->friendlyCar[i].posY += game->car.speed * game->time.deltaTime * CARS_MOVING_RATIO;
+	}
 
-		if (abs(playerPosX - enemyPosX) < CAR_WIDTH
-			&& abs(playerPosY - enemyPosY) < CAR_HEIGHT) {
-			if (playerPosX > enemyPosX || playerPosX < enemyPosX) {
-				game->car.posX = DEFAULT_POS_CAR_X;
-				game->car.life--;
-				game->enemyCar[0].posY = 700;
-				game->enemyCar[1].posY = 1000;
-				game->enemyCar[2].posY = 1500;
-				game->enemyCar[3].posY = 2000;
-				game->enemyCar[4].posY = 4000;
-				t1 = game->time.worldTime;
-				printf("%i", t1);
-			}
+	// Back cars
+	for (int i = MAX_FRONT_CARS_INDEX+1; i <= MAX_BACK_CARS_INDEX; ++i) {
+		// Adapting cars speed to the envirnoment
+		int tempSpeed= CAR_DEFAULT_SPEED;
+		if (game->car.speed > CAR_DEFAULT_SPEED) tempSpeed = BACK_CARS_ACCELERATION;
+		else if (game->car.speed < CAR_DEFAULT_SPEED) tempSpeed = BACK_CARS_SLOWDOWN;
+		else tempSpeed = CAR_DEFAULT_SPEED;
+
+		game->enemyCar[i].posY -= tempSpeed * game->time.deltaTime * CARS_MOVING_RATIO/2;
+	}
+}
+
+void checkCarCollisionStatus(Game* game) {
+	for (int ENEMY_INDEX = 0; ENEMY_INDEX <= MAX_ENEMY_CARS_INDEX; ++ENEMY_INDEX) {
+		for (int FRIEND_INDEX = 0; FRIEND_INDEX <= MAX_FRIENDLY_CARS_INDEX; ++FRIEND_INDEX){
+			double playerPosX = game->car.posX;
+			double playerPosY = game->car.posY;
+			double enemyPosX = game->enemyCar[ENEMY_INDEX].posX;
+			double enemyPosY = game->enemyCar[ENEMY_INDEX].posY;
+			double friendPosX = game->friendlyCar[FRIEND_INDEX].posX;
+			double friendPosY = game->friendlyCar[FRIEND_INDEX].posY;
+
+			// Check if TIME_WITHOUT_POINTS has elapsed since the destruction of the friendly car
+			if (game->time.worldTime - game->time.destroyTime < TIME_WITHOUT_POINTS && game->time.worldTime > TIME_WITHOUT_POINTS) 
+				game->status.destroyFriend = true;
+			else 
+				game->status.destroyFriend = false;
+
+			// Check collision with enemy cars
+			checkCollision(game, playerPosX, playerPosY, enemyPosX, enemyPosY, "enemy");
+			
+			// Check collision with friendly cars
+			checkCollision(game, playerPosX, playerPosY, friendPosX, friendPosY, "friend");
 		}
 	}
+}
+
+void checkCollision(Game* game, double playerPosX, double playerPosY, double botPosX, double botPosY, const char* botStatus) {
+	if (abs(playerPosX - botPosX) < CAR_WIDTH && abs(playerPosY - botPosY) < CAR_HEIGHT) {
+		if (playerPosX > botPosX || playerPosX < botPosX) {
+			game->car.posX = DEFAULT_POS_CAR_X;
+			game->car.life--;
+			randomizeCarsPositions(game);
+			if (botStatus == "friend") game->time.destroyTime = game->time.worldTime;
+		}
+	}
+}
+
+void randomizeCarsPositions(Game* game) {
+	// Front cars
+	for (int i = 0; i <= MAX_FRONT_CARS_INDEX; ++i) {
+		int newPosX = rand() % ROAD_WIDTH + ROAD_WIDTH;
+		int newPosY = rand() % (SCREEN_HEIGHT + 520) - 1500;
+		while (checkDoublingPosition(game, newPosX, newPosY)) {
+			newPosX = rand() % ROAD_WIDTH + ROAD_WIDTH;
+			newPosY = rand() % (SCREEN_HEIGHT + 520) - 1500;
+		}
+		game->enemyCar[i].posX = newPosX;
+		game->enemyCar[i].posY = newPosY;
+		game->friendlyCar[i].posX = newPosX;
+		game->friendlyCar[i].posY = newPosY;
+	}
+
+	// Back cars
+	for (int i = MAX_FRONT_CARS_INDEX + 1; i <= MAX_BACK_CARS_INDEX; ++i) {
+		int newPosX = rand() % ROAD_WIDTH + ROAD_WIDTH;
+		int newPosY = rand() % 3 * SCREEN_HEIGHT + 2 * SCREEN_HEIGHT;
+		while (checkDoublingPosition(game, newPosX, newPosY)) {
+			newPosX = rand() % ROAD_WIDTH + ROAD_WIDTH;
+			newPosY = rand() % 3 * SCREEN_HEIGHT + 2 * SCREEN_HEIGHT;
+		}
+		game->enemyCar[i].posX = newPosX;
+		game->enemyCar[i].posY = newPosY;
+	}
+}
+
+bool checkDoublingPosition(Game* game, int newPosX, int newPosY) {
+	for (int i = 0; i <= MAX_FRONT_CARS_INDEX; i++) {
+		if (abs(newPosX - game->enemyCar[i].posX) < 100 && abs(newPosY - game->enemyCar[i].posY) < 100) 
+			return true;
+		
+		if (abs(newPosX - game->friendlyCar[i].posX) < 100 && abs(newPosY - game->friendlyCar[i].posY) < 100) 
+			return true;
+	}
+	return false;
 }
